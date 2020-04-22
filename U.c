@@ -6,22 +6,31 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
-struct flags{
+typedef struct{
     int nsecs;
     char* fifoname;
-};
+}flags;
 
-void printFlags(struct flags *flags){
+typedef struct{
+    int i;
+    pid_t pid;
+    pthread_t tid;
+    int dur;
+    int pl;
+}message;
+
+void printFlags(flags *flags){
     printf("nsecs: %d\n",flags->nsecs);
     printf("fifoname: %s\n",flags->fifoname);
 }
 
-void initFlags(struct flags *flags){
+void initFlags(flags *flags){
    flags->nsecs = 0;
 }
 
-void setFlags(int argc,char* argv[],struct flags *flags){
+void setFlags(int argc,char* argv[],flags *flags){
     for(int i = 1;i<argc;i++){
         if (!strcmp(argv[i], "-t")){
             i++;
@@ -41,8 +50,27 @@ void setFlags(int argc,char* argv[],struct flags *flags){
     }
 }
 
+message makeMessage(int i,int dur,int pl){
+    message msg;
+    msg.i = i;
+    msg.pid = getpid();
+    msg.tid = pthread_self();
+    msg.dur = dur;
+    msg.pl = pl;
+    return msg;
+}
+
+void printMessage(message *msg){
+    printf("i: %d\n",msg->i);
+    printf("pid: %d\n",msg->pid);
+    printf("tid: %ld\n",msg->tid);
+    printf("dur: %d\n",msg->dur);
+    printf("pl: %d\n",msg->pl);
+}
+
 int main(int argc, char *argv[]) {
-    struct flags flags;
+    flags flags;
+    message message;
     int fd;
 
     initFlags(&flags);
@@ -58,10 +86,9 @@ int main(int argc, char *argv[]) {
     }
 
 
-
     //EACH THREAD MAKES 1 REQUEST
-    char* testSend = "GANDA FIFO";
-    write(fd,testSend,11);
+    message = makeMessage(1,10,-1);
+    write(fd,&message,sizeof(message));
 
     return 0;
 }
