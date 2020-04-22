@@ -71,8 +71,6 @@ void printMessage(message *msg){
 
 int main(int argc, char *argv[]) {
     flags flags; 
-    
-    
     message message;
     int fd;
 
@@ -87,9 +85,12 @@ int main(int argc, char *argv[]) {
         printf("No server fifo, can't make request\n");
         exit(1);
     }
+
+    time_t start = time(NULL);
     
-    while(clock()/CLOCKS_PER_SEC < flags.nsecs){
-        printf("%ld\n",clock()/CLOCKS_PER_SEC);
+    while(time(NULL)-start < flags.nsecs){
+        printf("%ld\n",time(NULL)-start);
+        usleep(100000);
     }
 
     //EACH THREAD MAKES 1 REQUEST
