@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <time.h>
 
 typedef struct{
     int nsecs;
@@ -69,7 +70,9 @@ void printMessage(message *msg){
 }
 
 int main(int argc, char *argv[]) {
-    flags flags;
+    flags flags; 
+    
+    
     message message;
     int fd;
 
@@ -84,7 +87,10 @@ int main(int argc, char *argv[]) {
         printf("No server fifo, can't make request\n");
         exit(1);
     }
-
+    
+    while(clock()/CLOCKS_PER_SEC < flags.nsecs){
+        printf("%ld\n",clock()/CLOCKS_PER_SEC);
+    }
 
     //EACH THREAD MAKES 1 REQUEST
     message = makeMessage(1,10,-1);

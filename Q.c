@@ -114,6 +114,7 @@ int main(int argc, char *argv[]) {
     read(fd,toReceive,sizeof(message));
 
     close(fd);
+    unlink(aux);
 
     return 0;
 }
