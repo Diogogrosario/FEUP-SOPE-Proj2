@@ -8,12 +8,14 @@
 #include <fcntl.h>
 #include <pthread.h>
 
+#define MAX_THREADS 100
+
 typedef struct{
     int nsecs;
     int nplaces;
     int nthreads;
     char* fifoname;
-}flags ;
+} flags;
 
 typedef struct{
     int i;
@@ -21,13 +23,13 @@ typedef struct{
     pthread_t tid;
     int dur;
     int pl;
-}message;
+} message;
 
 void printFlags(flags *flags){
-    printf("nsecs: %d\n",flags->nsecs);
-    printf("nplaces: %d\n",flags->nplaces);
-    printf("nthreads: %d\n",flags->nthreads);
-    printf("fifoname: %s\n",flags->fifoname);
+    printf("nsecs: %d\n", flags->nsecs);
+    printf("nplaces: %d\n", flags->nplaces);
+    printf("nthreads: %d\n", flags->nthreads);
+    printf("fifoname: %s\n", flags->fifoname);
 }
 
 void initFlags(flags *flags){
@@ -37,8 +39,8 @@ void initFlags(flags *flags){
 
 }
 
-void setFlags(int argc,char* argv[],flags *flags){
-    for(int i = 1;i<argc;i++){
+void setFlags(int argc, char* argv[], flags *flags){
+    for(int i = 1; i < argc; i++){
         if (!strcmp(argv[i], "-t")){
             i++;
             for (int j = 0; j < strlen(argv[i]); ++j)
@@ -81,7 +83,7 @@ void setFlags(int argc,char* argv[],flags *flags){
     }
 }
 
-message makeMessage(int i,int dur,int pl){
+message makeMessage(int i, int dur, int pl){
     message msg;
     msg.i = i;
     msg.pid = getpid();
@@ -92,26 +94,55 @@ message makeMessage(int i,int dur,int pl){
 }
 
 void printMessage(message *msg){
-    printf("i: %d\n",msg->i);
-    printf("pid: %d\n",msg->pid);
-    printf("tid: %ld\n",msg->tid);
-    printf("dur: %d\n",msg->dur);
-    printf("pl: %d\n",msg->pl);
+    printf("i: %d\n", msg->i);
+    printf("pid: %d\n", msg->pid);
+    printf("tid: %ld\n", msg->tid);
+    printf("dur: %d\n", msg->dur);
+    printf("pl: %d\n", msg->pl);
+}
+
+void * receiveRequest(void * msg) {
+    message request = *(message*)msg;
+    printMessage(&request);
+
+    char* aux = malloc(sizeof(char)*100);
+    sprintf(aux,"/tmp/%d.%ld", request.pid, request.tid);
+    mkfifo(aux, 0666);
+    
+    int fd = open(aux, O_WRONLY);
+    message *toSend = malloc(sizeof(message));
+    *toSend = makeMessage(request.i, request.dur, request.i);
+    write(fd, toSend, sizeof(message));
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
     flags flags;
 
+    pthread_t threads[MAX_THREADS];
+
     initFlags(&flags);
-    setFlags(argc,argv,&flags);
+    setFlags(argc, argv, &flags);
 
     char* aux = malloc(sizeof(char)*100);
-    sprintf(aux,"/tmp/%s",flags.fifoname);
-    mkfifo(aux,0666);
+    sprintf(aux,"/tmp/%s", flags.fifoname);
+    mkfifo(aux, 0666);
     
-    int fd = open(aux,O_RDONLY);
+    int fd = open(aux, O_RDONLY);
     message *toReceive = malloc(sizeof(message));
-    read(fd,toReceive,sizeof(message));
+    
+
+    time_t start = time(NULL);
+
+    
+    while(time(NULL)-start < flags.nsecs){
+        
+        if(read(fd, toReceive, sizeof(message))> 0) {
+            
+            pthread_create(&threads[toReceive->i], NULL, receiveRequest, toReceive);
+        }
+    }
 
     close(fd);
     unlink(aux);
