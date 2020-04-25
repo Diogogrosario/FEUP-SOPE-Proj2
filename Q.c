@@ -170,8 +170,9 @@ int main(int argc, char *argv[]) {
     sprintf(publicFIFO,"/tmp/%s", flags.fifoname);
     mkfifo(publicFIFO, 0666);
     
-    int fd = open(publicFIFO, O_RDONLY);
+    int fd = open(publicFIFO, O_RDONLY|O_NONBLOCK);
     message *toReceive = malloc(sizeof(message));
+
     
 
     clock_gettime(CLOCK_REALTIME,&start);
@@ -190,7 +191,6 @@ int main(int argc, char *argv[]) {
         
         clock_gettime(CLOCK_REALTIME,&timeNow);
     }
-
     close(fd);
     unlink(publicFIFO);
     finished = true;

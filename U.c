@@ -137,14 +137,6 @@ int main(int argc, char *argv[]) {
     initFlags(&flags);
     setFlags(argc, argv, &flags);
 
-    char* publicFIFO = malloc(sizeof(char)*100);
-    sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
-    
-
-    if((fd = open(publicFIFO, O_WRONLY)) == -1){
-    }
-
-   
 
     int thread_no = 0;
     clock_gettime(CLOCK_REALTIME,&start);
