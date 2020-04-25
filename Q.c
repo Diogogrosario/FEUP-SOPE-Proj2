@@ -5,10 +5,14 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <pthread.h>
 
 #define MAX_THREADS 100
+
+struct timespec start;
+bool finished = false;
 
 typedef struct{
     int nsecs;
@@ -93,59 +97,112 @@ message makeMessage(int i, int dur, int pl){
     return msg;
 }
 
-void printMessage(message *msg){
-    printf("i: %d\n", msg->i);
-    printf("pid: %d\n", msg->pid);
-    printf("tid: %ld\n", msg->tid);
-    printf("dur: %d\n", msg->dur);
-    printf("pl: %d\n", msg->pl);
+void printMessage(message *msg, char* op){
+    printf("%ld; ",time(NULL));
+    printf("%d; ", msg->i);
+    printf("%d; ", msg->pid);
+    printf("%ld; ", msg->tid);
+    printf("%d; ", msg->dur);
+    printf("%d; ", msg->pl);
+    printf("%s\n", op);
 }
 
 void * receiveRequest(void * msg) {
     message request = *(message*)msg;
-    printMessage(&request);
+    printMessage(&request, "RECVD");
+    
 
     char* aux = malloc(sizeof(char)*100);
-    sprintf(aux,"/tmp/%d.%ld", request.pid, request.tid);
-    mkfifo(aux, 0666);
-    
-    int fd = open(aux, O_WRONLY);
+    sprintf(aux, "/tmp/%d.%ld", request.pid, request.tid);
+
+    int nTries = 0;
+    int fdSend;
+    while ((fdSend = open(aux, O_WRONLY)) == -1 && nTries < 4)
+    {
+        nTries++;
+        usleep(1000);
+    }
+    if (fdSend == -1)
+    {
+        printMessage(&request,"GAVUP");
+        return NULL;
+    }
     message *toSend = malloc(sizeof(message));
     *toSend = makeMessage(request.i, request.dur, request.i);
-    write(fd, toSend, sizeof(message));
+    write(fdSend, toSend, sizeof(message));
+
+    printMessage(toSend, "ENTER");
+
+    struct timespec durLeft;
+    clock_gettime(CLOCK_REALTIME,&durLeft);
+    while(durLeft.tv_nsec/1000000.0<request.dur)
+    {
+        if(finished)
+        {
+            printMessage(toSend,"2LATE");
+            close(fdSend);
+
+            free(aux);
+            free(toSend);
+
+            return NULL;
+        }
+        clock_gettime(CLOCK_REALTIME,&durLeft);
+    }
+    printMessage(toSend, "TIMUP");
+    close(fdSend);
+
+    free(toSend);
+    free(aux);
 
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
     flags flags;
-
     pthread_t threads[MAX_THREADS];
+    int nThreads=0;
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
 
-    char* aux = malloc(sizeof(char)*100);
-    sprintf(aux,"/tmp/%s", flags.fifoname);
-    mkfifo(aux, 0666);
+    char* publicFIFO = malloc(sizeof(char)*100);
+    sprintf(publicFIFO,"/tmp/%s", flags.fifoname);
+    mkfifo(publicFIFO, 0666);
     
-    int fd = open(aux, O_RDONLY);
+    int fd = open(publicFIFO, O_RDONLY);
     message *toReceive = malloc(sizeof(message));
     
 
-    time_t start = time(NULL);
+    clock_gettime(CLOCK_REALTIME,&start);
 
-    
-    while(time(NULL)-start < flags.nsecs){
-        
-        if(read(fd, toReceive, sizeof(message))> 0) {
-            
-            pthread_create(&threads[toReceive->i], NULL, receiveRequest, toReceive);
+    struct timespec timeNow;
+    clock_gettime(CLOCK_REALTIME,&timeNow);
+    while(timeNow.tv_sec-start.tv_sec < flags.nsecs){
+        if(nThreads >= MAX_THREADS){
+            printf("Can't create more threads!\n");
+            break;
         }
+        else if(read(fd, toReceive, sizeof(message))> 0) {     
+            pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive);
+            nThreads++;
+        }
+        
+        clock_gettime(CLOCK_REALTIME,&timeNow);
     }
 
     close(fd);
-    unlink(aux);
+    unlink(publicFIFO);
+    finished = true;
 
+    for(int i=0;i<nThreads;i++)
+    {
+        pthread_join(threads[i], NULL);  
+    }
+
+
+    
+    free(publicFIFO);
+    free(toReceive);
     return 0;
 }
