@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <time.h>
+#include <semaphore.h>
 
 #define MAX_THREADS 500
 
@@ -65,7 +66,7 @@ message makeMessage(int i, int pl){
     msg.i = i;
     msg.pid = getpid();
     msg.tid = pthread_self();
-    msg.dur = (rand()%99)+1;
+    msg.dur = (rand()%800)+200;
     msg.pl = pl;
     return msg;
 }
@@ -87,9 +88,16 @@ void *sendRequest(void *thread_no)
     char* publicFIFO = malloc(sizeof(char)*100);
     sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
     
-    
-
     printMessage(&msg, "IWANT");
+
+    
+    char* semName = malloc(sizeof(char)*255);
+    sprintf(semName, "sem.%d.%ld", msg.pid, msg.tid);
+    sem_t *sem_id = sem_open(semName, O_CREAT, 0600, 0);
+
+    char *semName2 = malloc(sizeof(char) * 255);
+    sprintf(semName2, "sem2.%d.%ld", msg.pid, msg.tid);
+    sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
 
     if((fd = open(publicFIFO, O_WRONLY)) == -1){
         printMessage(&msg,"CLOSD");
@@ -101,30 +109,38 @@ void *sendRequest(void *thread_no)
     char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", msg.pid, msg.tid);
 
+    
     mkfifo(aux, 0666);
+    //UNLOCK SERVER CUZ FIFO IS CREATED
+
     int fdRequest;
 
-    if ((fdRequest = open(aux, O_RDONLY)) == -1)
+    if ((fdRequest = open(aux, O_RDONLY|O_NONBLOCK)) == -1)
     {
+        return NULL;
+    }
+
+    if(sem_post(sem_id)<0){
         return NULL;
     }
 
     message *toReceive = malloc(sizeof(message));
-    int nTries = 0;
-    while (read(fdRequest, toReceive, sizeof(message)) <= 0 && nTries < 8)
-    {
-        nTries++;
-        usleep(1000);
+
+    //WAITING FOR SERVER RESPONSE
+    if(sem_wait(sem_id2)<0){
+        return NULL;
     }
-    if(nTries>=8)
+    if(read(fdRequest, toReceive, sizeof(message)) <= 0)
     {
         printMessage(&msg,"FAILD");
         return NULL;
     }
+
     printMessage(toReceive, "IAMIN");
     close(fdRequest);
 
     unlink(aux);
+    free(semName);
 
     return NULL;
 }

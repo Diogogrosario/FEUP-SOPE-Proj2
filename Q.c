@@ -8,20 +8,23 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <semaphore.h>
 
-#define MAX_THREADS 100
+#define MAX_THREADS 500
 
 struct timespec start;
 bool finished = false;
 
-typedef struct{
+typedef struct
+{
     int nsecs;
     int nplaces;
     int nthreads;
-    char* fifoname;
+    char *fifoname;
 } flags;
 
-typedef struct{
+typedef struct
+{
     int i;
     pid_t pid;
     pthread_t tid;
@@ -29,23 +32,27 @@ typedef struct{
     int pl;
 } message;
 
-void printFlags(flags *flags){
+void printFlags(flags *flags)
+{
     printf("nsecs: %d\n", flags->nsecs);
     printf("nplaces: %d\n", flags->nplaces);
     printf("nthreads: %d\n", flags->nthreads);
     printf("fifoname: %s\n", flags->fifoname);
 }
 
-void initFlags(flags *flags){
-   flags->nsecs = 0;
-   flags->nplaces = 0;
-   flags->nthreads = 0;
-
+void initFlags(flags *flags)
+{
+    flags->nsecs = 0;
+    flags->nplaces = 0;
+    flags->nthreads = 0;
 }
 
-void setFlags(int argc, char* argv[], flags *flags){
-    for(int i = 1; i < argc; i++){
-        if (!strcmp(argv[i], "-t")){
+void setFlags(int argc, char *argv[], flags *flags)
+{
+    for (int i = 1; i < argc; i++)
+    {
+        if (!strcmp(argv[i], "-t"))
+        {
             i++;
             for (int j = 0; j < strlen(argv[i]); ++j)
             {
@@ -57,7 +64,8 @@ void setFlags(int argc, char* argv[], flags *flags){
             }
             flags->nsecs = atoi(argv[i]);
         }
-        else if (!strcmp(argv[i], "-l")){
+        else if (!strcmp(argv[i], "-l"))
+        {
             i++;
             for (int j = 0; j < strlen(argv[i]); ++j)
             {
@@ -69,7 +77,8 @@ void setFlags(int argc, char* argv[], flags *flags){
             }
             flags->nplaces = atoi(argv[i]);
         }
-        else if (!strcmp(argv[i], "-n")){
+        else if (!strcmp(argv[i], "-n"))
+        {
             i++;
             for (int j = 0; j < strlen(argv[i]); ++j)
             {
@@ -81,13 +90,15 @@ void setFlags(int argc, char* argv[], flags *flags){
             }
             flags->nthreads = atoi(argv[i]);
         }
-        else{
+        else
+        {
             flags->fifoname = argv[i];
         }
     }
 }
 
-message makeMessage(int i, int dur, int pl){
+message makeMessage(int i, int dur, int pl)
+{
     message msg;
     msg.i = i;
     msg.pid = getpid();
@@ -97,8 +108,9 @@ message makeMessage(int i, int dur, int pl){
     return msg;
 }
 
-void printMessage(message *msg, char* op){
-    printf("%ld; ",time(NULL));
+void printMessage(message *msg, char *op)
+{
+    printf("%ld; ", time(NULL));
     printf("%d; ", msg->i);
     printf("%d; ", msg->pid);
     printf("%ld; ", msg->tid);
@@ -107,101 +119,122 @@ void printMessage(message *msg, char* op){
     printf("%s\n", op);
 }
 
-void * receiveRequest(void * msg) {
-    message request = *(message*)msg;
-    printMessage(&request, "RECVD");
-    
+void *receiveRequest(void *msg)
+{
 
-    char* aux = malloc(sizeof(char)*100);
+    message request = *(message *)msg;
+    printMessage(&request, "RECVD");
+
+    //SEMAPHORE
+    char *semName = malloc(sizeof(char) * 255);
+    sprintf(semName, "sem.%d.%ld", request.pid, request.tid);
+    sem_t *sem_id = sem_open(semName, O_CREAT, 0600, 0);
+
+    char *semName2 = malloc(sizeof(char) * 255);
+    sprintf(semName2, "sem2.%d.%ld", request.pid, request.tid);
+    sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
+
+    char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", request.pid, request.tid);
 
-    int nTries = 0;
     int fdSend;
-    while ((fdSend = open(aux, O_WRONLY)) == -1 && nTries < 4)
-    {
-        nTries++;
-        usleep(1000);
-    }
-    if (fdSend == -1)
-    {
-        printMessage(&request,"GAVUP");
+
+
+    //LOCK, WAITING FOR CLIENT TO OPEN FIFO
+    if (sem_wait(sem_id) < 0)
+    {   
         return NULL;
     }
+
+    //ABRIR FIFO PRIVADO
+    if ((fdSend = open(aux, O_WRONLY)) == -1)
+    {
+        printMessage(&request, "GAVUP");
+        return NULL;
+    }
+
+
+
     message *toSend = malloc(sizeof(message));
     *toSend = makeMessage(request.i, request.dur, request.i);
+
+    if (finished)
+    {
+        if (sem_post(sem_id2) < 0)
+        {
+            return NULL;
+        }
+        printMessage(toSend, "2LATE");
+        close(fdSend);
+        free(aux);
+        free(toSend);
+        free(semName);
+        return NULL;
+    }
+
     write(fdSend, toSend, sizeof(message));
+
+    //CLIENT CAN NOW RECEIVE MSG
+    if (sem_post(sem_id2) < 0)
+    {
+        return NULL;
+    }
 
     printMessage(toSend, "ENTER");
 
-    struct timespec durLeft;
-    clock_gettime(CLOCK_REALTIME,&durLeft);
-    while(durLeft.tv_nsec/1000000.0<request.dur)
-    {
-        if(finished)
-        {
-            printMessage(toSend,"2LATE");
-            close(fdSend);
-
-            free(aux);
-            free(toSend);
-
-            return NULL;
-        }
-        clock_gettime(CLOCK_REALTIME,&durLeft);
-    }
+    usleep(request.dur);
     printMessage(toSend, "TIMUP");
     close(fdSend);
 
     free(toSend);
     free(aux);
-
+    free(semName);
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     flags flags;
     pthread_t threads[MAX_THREADS];
-    int nThreads=0;
+    int nThreads = 0;
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
 
-    char* publicFIFO = malloc(sizeof(char)*100);
-    sprintf(publicFIFO,"/tmp/%s", flags.fifoname);
+    char *publicFIFO = malloc(sizeof(char) * 100);
+    sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
     mkfifo(publicFIFO, 0666);
-    
-    int fd = open(publicFIFO, O_RDONLY|O_NONBLOCK);
+
+    int fd = open(publicFIFO, O_RDONLY | O_NONBLOCK);
     message *toReceive = malloc(sizeof(message));
 
-    
-
-    clock_gettime(CLOCK_REALTIME,&start);
+    clock_gettime(CLOCK_REALTIME, &start);
 
     struct timespec timeNow;
-    clock_gettime(CLOCK_REALTIME,&timeNow);
-    while(timeNow.tv_sec-start.tv_sec < flags.nsecs){
-        if(nThreads >= MAX_THREADS){
+    clock_gettime(CLOCK_REALTIME, &timeNow);
+    while (timeNow.tv_sec - start.tv_sec < flags.nsecs)
+    {
+        if (nThreads >= MAX_THREADS)
+        {
             printf("Can't create more threads!\n");
             break;
         }
-        else if(read(fd, toReceive, sizeof(message))> 0) {     
+        else if (read(fd, toReceive, sizeof(message)) > 0)
+        {
             pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive);
             nThreads++;
         }
-        
-        clock_gettime(CLOCK_REALTIME,&timeNow);
+        clock_gettime(CLOCK_REALTIME, &timeNow);
     }
+    finished = true;
     close(fd);
     unlink(publicFIFO);
-    finished = true;
 
-    for(int i=0;i<nThreads;i++)
+    for (int i = 0; i < nThreads; i++)
     {
-        pthread_join(threads[i], NULL);  
+        pthread_join(threads[i], NULL);
     }
 
-
-    
     free(publicFIFO);
     free(toReceive);
     return 0;
