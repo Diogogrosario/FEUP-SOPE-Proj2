@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <semaphore.h>
+#include <stdbool.h>
 
 #define MAX_THREADS 500
 
@@ -31,6 +32,8 @@ typedef struct{
 } message;
 
 int fd;
+
+bool closed = false;
 
 void printFlags(flagsList * flags){
     printf("nsecs: %d\n", flags->nsecs);
@@ -110,6 +113,7 @@ void *sendRequest(void *thread_no)
 
     if((fd = open(publicFIFO, O_WRONLY|O_NONBLOCK)) == -1){
         printMessage(&msg,"CLOSD");
+        closed = true;
         return NULL;
     }
 
@@ -180,7 +184,7 @@ int main(int argc, char *argv[]) {
 
     struct timespec timeNow;
     clock_gettime(CLOCK_REALTIME,&timeNow);
-    while(timeNow.tv_sec-start.tv_sec < flags.nsecs){
+    while(timeNow.tv_sec-start.tv_sec < flags.nsecs && !closed){
         if (thread_no > MAX_THREADS)
         {
             break;

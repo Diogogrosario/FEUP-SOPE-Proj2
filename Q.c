@@ -133,8 +133,7 @@ void sig_handler(int intType)
 }
 
 void *receiveRequest(void *msg)
-{
-
+{   
     message request = *(message *)msg;
     printMessage(&request, "RECVD");
 
@@ -264,6 +263,7 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Error on creating thread %d on server\n", nThreads);
             }
         }
+        
         clock_gettime(CLOCK_REALTIME, &timeNow);
     }
     finished = true;
