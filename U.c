@@ -99,28 +99,47 @@ void *sendRequest(void *thread_no)
     sprintf(semName2, "sem2.%d.%ld", msg.pid, msg.tid);
     sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
 
-    if((fd = open(publicFIFO, O_WRONLY)) == -1){
+    if(sem_id2 == NULL) {
+        fprintf(stderr, "Error on sem_open for %s\n", semName2);
+        return NULL;
+    }
+    if(sem_id == NULL) {
+        fprintf(stderr, "Error on sem_open for %s\n", semName);
+        return NULL;
+    }
+
+    if((fd = open(publicFIFO, O_WRONLY|O_NONBLOCK)) == -1){
         printMessage(&msg,"CLOSD");
         return NULL;
     }
 
-    write(fd, &msg, sizeof(msg));
+    if(write(fd, &msg, sizeof(msg)) == -1) {
+        perror("Error on writing client request to public FIFO\n");
+        return NULL;
+    }
 
     char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", msg.pid, msg.tid);
 
     
-    mkfifo(aux, 0666);
+    if(mkfifo(aux, 0666) == -1) {
+        perror("Error on making private FIFO\n");
+        return NULL;
+    }
     //UNLOCK SERVER CUZ FIFO IS CREATED
 
     int fdRequest;
 
-    if ((fdRequest = open(aux, O_RDONLY|O_NONBLOCK)) == -1)
-    {
-        return NULL;
-    }
+    
 
     if(sem_post(sem_id)<0){
+        fprintf(stderr, "Error on sem_post for %s\n", semName);
+        return NULL;
+    }
+    
+    if ((fdRequest = open(aux, O_RDONLY)) == -1)
+    {
+        perror(aux);
         return NULL;
     }
 
@@ -128,6 +147,7 @@ void *sendRequest(void *thread_no)
 
     //WAITING FOR SERVER RESPONSE
     if(sem_wait(sem_id2)<0){
+        fprintf(stderr, "Error on sem_wait for %s\n", semName2);
         return NULL;
     }
     if(read(fdRequest, toReceive, sizeof(message)) <= 0)
@@ -141,6 +161,7 @@ void *sendRequest(void *thread_no)
 
     unlink(aux);
     free(semName);
+    free(semName2);
 
     return NULL;
 }
@@ -165,9 +186,14 @@ int main(int argc, char *argv[]) {
             break;
         }
         
-        pthread_create(&threads[thread_no], NULL, sendRequest, &thread_no);
-        thread_no += 1;
-        usleep((rand()%50000)+50000);
+        if(pthread_create(&threads[thread_no], NULL, sendRequest, &thread_no) == 0) {
+            thread_no += 1;
+            usleep((rand()%50000)+50000); //time between requests
+        }
+        else {
+            fprintf(stderr, "Error on creating thread %d on client\n", thread_no);
+        }
+
         clock_gettime(CLOCK_REALTIME,&timeNow);
     }
 

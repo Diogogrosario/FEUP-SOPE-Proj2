@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #define MAX_THREADS 500
 
@@ -119,6 +120,18 @@ void printMessage(message *msg, char *op)
     printf("%s\n", op);
 }
 
+void sig_handler(int intType)
+{
+    switch (intType)
+    {
+    case SIGALRM:
+        finished = true;
+        break;
+    default:
+        break;
+    }
+}
+
 void *receiveRequest(void *msg)
 {
 
@@ -137,12 +150,22 @@ void *receiveRequest(void *msg)
     char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", request.pid, request.tid);
 
+    if(sem_id2 == NULL) {
+        fprintf(stderr, "Error on sem_open for %s\n", semName2);
+        return NULL;
+    }
+    if(sem_id == NULL) {
+        fprintf(stderr, "Error on sem_open for %s\n", semName);
+        return NULL;
+    }
+
     int fdSend;
 
 
     //LOCK, WAITING FOR CLIENT TO OPEN FIFO
     if (sem_wait(sem_id) < 0)
     {   
+        fprintf(stderr, "Error on sem_wait for %s\n", semName);
         return NULL;
     }
 
@@ -162,6 +185,7 @@ void *receiveRequest(void *msg)
     {
         if (sem_post(sem_id2) < 0)
         {
+            fprintf(stderr, "Error on sem_post for %s\n", semName2);
             return NULL;
         }
         printMessage(toSend, "2LATE");
@@ -169,26 +193,32 @@ void *receiveRequest(void *msg)
         free(aux);
         free(toSend);
         free(semName);
+        free(semName2);
         return NULL;
     }
 
-    write(fdSend, toSend, sizeof(message));
+    if(write(fdSend, toSend, sizeof(message)) == -1) {
+        perror("Error on writing server response to public FIFO\n");
+    }
 
     //CLIENT CAN NOW RECEIVE MSG
     if (sem_post(sem_id2) < 0)
     {
+        fprintf(stderr, "Error on sem_post for %s\n", semName2);
         return NULL;
     }
 
     printMessage(toSend, "ENTER");
 
-    usleep(request.dur);
+    usleep(request.dur*1000);
     printMessage(toSend, "TIMUP");
     close(fdSend);
 
     free(toSend);
     free(aux);
     free(semName);
+
+    free(semName2);
     return NULL;
 }
 
@@ -201,18 +231,24 @@ int main(int argc, char *argv[])
     initFlags(&flags);
     setFlags(argc, argv, &flags);
 
+    if (signal(SIGALRM, sig_handler) < 0) {
+        fprintf(stderr, "Error on setting signal handler\n");
+        exit(1);
+    }
+    alarm(flags.nsecs);
+
     char *publicFIFO = malloc(sizeof(char) * 100);
     sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
     mkfifo(publicFIFO, 0666);
 
-    int fd = open(publicFIFO, O_RDONLY | O_NONBLOCK);
+    int fd = open(publicFIFO, O_RDONLY|O_NONBLOCK);
     message *toReceive = malloc(sizeof(message));
 
     clock_gettime(CLOCK_REALTIME, &start);
 
     struct timespec timeNow;
     clock_gettime(CLOCK_REALTIME, &timeNow);
-    while (timeNow.tv_sec - start.tv_sec < flags.nsecs)
+    while (timeNow.tv_sec - start.tv_sec < flags.nsecs && !finished)
     {
         if (nThreads >= MAX_THREADS)
         {
@@ -221,14 +257,20 @@ int main(int argc, char *argv[])
         }
         else if (read(fd, toReceive, sizeof(message)) > 0)
         {
-            pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive);
-            nThreads++;
+            if(pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive) == 0) {
+                nThreads++;
+            }
+            else {
+                fprintf(stderr, "Error on creating thread %d on server\n", nThreads);
+            }
         }
         clock_gettime(CLOCK_REALTIME, &timeNow);
     }
     finished = true;
+
     close(fd);
     unlink(publicFIFO);
+
 
     for (int i = 0; i < nThreads; i++)
     {
