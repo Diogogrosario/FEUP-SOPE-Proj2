@@ -134,6 +134,7 @@ void sig_handler(int intType)
 
 void *receiveRequest(void *msg)
 {   
+    pthread_detach(pthread_self());
     message request = *(message *)msg;
     printMessage(&request, "RECVD");
 
@@ -216,8 +217,8 @@ void *receiveRequest(void *msg)
     free(toSend);
     free(aux);
     free(semName);
-
     free(semName2);
+
     return NULL;
 }
 
@@ -271,13 +272,8 @@ int main(int argc, char *argv[])
     close(fd);
     unlink(publicFIFO);
 
-
-    for (int i = 0; i < nThreads; i++)
-    {
-        pthread_join(threads[i], NULL);
-    }
-
     free(publicFIFO);
     free(toReceive);
-    return 0;
+    
+    pthread_exit(0);
 }
