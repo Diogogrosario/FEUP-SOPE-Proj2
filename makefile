@@ -1,7 +1,11 @@
-all: Q U
+all: Q1 U1
 
-Q: Q.c
-	gcc -Wall -pthread -o Q Q.c
+Q1: Q1.c
+	gcc -Wall -pthread -o Q1 Q1.c
 
-U: U.c
-	gcc -Wall -pthread -o U U.c
+U1: U1.c
+	gcc -Wall -pthread -o U1 U1.c
+
+
+clean:
+	@rm -f *.o U1 Q1

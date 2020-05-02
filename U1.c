@@ -35,6 +35,7 @@ int fd;
 
 bool closed = false;
 
+
 void printFlags(flagsList * flags){
     printf("nsecs: %d\n", flags->nsecs);
     printf("fifoname: %s\n", flags->fifoname);
@@ -84,6 +85,8 @@ void printMessage(message *msg, char* op){
     printf("%s\n", op);
 }
 
+
+
 void *sendRequest(void *thread_no)
 {
     message msg = makeMessage(*(int *)thread_no, -1);
@@ -117,10 +120,12 @@ void *sendRequest(void *thread_no)
         return NULL;
     }
 
+
     if(write(fd, &msg, sizeof(msg)) == -1) {
         perror("Error on writing client request to public FIFO\n");
         return NULL;
     }
+    
 
     char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", msg.pid, msg.tid);
@@ -160,7 +165,14 @@ void *sendRequest(void *thread_no)
         return NULL;
     }
 
-    printMessage(toReceive, "IAMIN");
+    if(toReceive->pl == -1) {
+        printMessage(toReceive, "CLOSD");
+        closed = true;
+    }
+    else {
+        printMessage(toReceive, "IAMIN");
+    }
+
     close(fdRequest);
 
     unlink(aux);
@@ -171,13 +183,13 @@ void *sendRequest(void *thread_no)
 }
 
 int main(int argc, char *argv[]) {
+
     srand(time(NULL));
     
     pthread_t threads[MAX_THREADS];
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
-
 
     int thread_no = 0;
     clock_gettime(CLOCK_REALTIME,&start);

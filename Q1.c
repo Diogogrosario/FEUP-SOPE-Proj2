@@ -126,6 +126,10 @@ void sig_handler(int intType)
     {
     case SIGALRM:
         finished = true;
+        // int nClients;
+        // sem_getvalue(clientQ, &nClients);
+        // if(nClients == 0)
+        //     sem_post(clientQ);
         break;
     default:
         break;
@@ -137,6 +141,8 @@ void *receiveRequest(void *msg)
     pthread_detach(pthread_self());
     message request = *(message *)msg;
     printMessage(&request, "RECVD");
+
+    
 
     //SEMAPHORE
     char *semName = malloc(sizeof(char) * 255);
@@ -179,8 +185,20 @@ void *receiveRequest(void *msg)
 
 
     message *toSend = malloc(sizeof(message));
-    *toSend = makeMessage(request.i, request.dur, request.i);
+    
 
+    
+    if(!finished) {
+        *toSend = makeMessage(request.i, request.dur, request.i);
+    }
+    else {
+        *toSend = makeMessage(request.i, request.dur, -1);
+    }
+
+    if(write(fdSend, toSend, sizeof(message)) == -1) {
+        perror("Error on writing server response to public FIFO\n");
+    }
+    
     if (finished)
     {
         if (sem_post(sem_id2) < 0)
@@ -196,10 +214,7 @@ void *receiveRequest(void *msg)
         free(semName2);
         return NULL;
     }
-
-    if(write(fdSend, toSend, sizeof(message)) == -1) {
-        perror("Error on writing server response to public FIFO\n");
-    }
+  
 
     //CLIENT CAN NOW RECEIVE MSG
     if (sem_post(sem_id2) < 0)
@@ -241,21 +256,20 @@ int main(int argc, char *argv[])
     sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
     mkfifo(publicFIFO, 0666);
 
-    int fd = open(publicFIFO, O_RDONLY|O_NONBLOCK);
+    int fd = open(publicFIFO, O_RDONLY);
     message *toReceive = malloc(sizeof(message));
 
-    clock_gettime(CLOCK_REALTIME, &start);
 
-    struct timespec timeNow;
-    clock_gettime(CLOCK_REALTIME, &timeNow);
-    while (timeNow.tv_sec - start.tv_sec < flags.nsecs && !finished)
+
+    int nClients = 0;
+    while (nClients != 0 || !finished)
     {
         if (nThreads >= MAX_THREADS)
         {
             printf("Can't create more threads!\n");
             break;
         }
-        else if (read(fd, toReceive, sizeof(message)) > 0)
+        else if((nClients = read(fd, toReceive, sizeof(message))) > 0)
         {
             if(pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive) == 0) {
                 nThreads++;
@@ -264,13 +278,11 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Error on creating thread %d on server\n", nThreads);
             }
         }
-        
-        clock_gettime(CLOCK_REALTIME, &timeNow);
     }
-    finished = true;
 
     close(fd);
     unlink(publicFIFO);
+    finished = true;
 
     free(publicFIFO);
     free(toReceive);
