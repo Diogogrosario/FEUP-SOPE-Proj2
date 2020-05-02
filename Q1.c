@@ -11,7 +11,7 @@
 #include <semaphore.h>
 #include <signal.h>
 
-#define MAX_THREADS 500
+#define MAX_THREADS 500000
 
 struct timespec start;
 bool finished = false;
@@ -257,6 +257,7 @@ int main(int argc, char *argv[])
 
     int fd = open(publicFIFO, O_RDONLY);
     if(fd == -1 && errno == EINTR) {
+        perror("Could not open public FIFO for reading");
         finished = true;
     }
     message *toReceive = malloc(sizeof(message));

@@ -11,7 +11,7 @@
 #include <semaphore.h>
 #include <stdbool.h>
 
-#define MAX_THREADS 500
+#define MAX_THREADS 500000
 
 struct timespec start;
 
@@ -174,8 +174,8 @@ void *sendRequest(void *thread_no)
     }
 
     close(fdRequest);
-
     unlink(aux);
+    
     free(semName);
     free(semName2);
 
