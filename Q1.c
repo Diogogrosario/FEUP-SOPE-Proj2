@@ -15,6 +15,7 @@
 
 struct timespec start;
 bool finished = false;
+bool hasFifoName = false;
 
 typedef struct
 {
@@ -94,6 +95,7 @@ void setFlags(int argc, char *argv[], flags *flags)
         else
         {
             flags->fifoname = argv[i];
+            hasFifoName = true;
         }
     }
 }
@@ -246,6 +248,11 @@ int main(int argc, char *argv[])
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
+
+    if(flags.nsecs == 0 || !hasFifoName) {
+        fprintf(stderr, "Correct usage: Q1 -t n fifoName\n");
+        pthread_exit(0);
+    }
 
     sigaction(SIGALRM, &action, NULL);
 

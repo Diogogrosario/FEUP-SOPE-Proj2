@@ -35,6 +35,8 @@ int fd;
 
 bool closed = false;
 
+bool hasFifoName = false;
+
 
 void printFlags(flagsList * flags){
     printf("nsecs: %d\n", flags->nsecs);
@@ -61,6 +63,7 @@ void setFlags(int argc, char* argv[], flagsList *flags){
         }
         else{
             flags->fifoname = argv[i];
+            hasFifoName = true;
         }
     }
 }
@@ -190,6 +193,10 @@ int main(int argc, char *argv[]) {
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
+    if(flags.nsecs == 0 || !hasFifoName) {
+        fprintf(stderr, "Correct usage: U1 -t n fifoName\n");
+        return 0;
+    }
 
     int thread_no = 0;
     clock_gettime(CLOCK_REALTIME,&start);
