@@ -126,10 +126,6 @@ void sig_handler(int intType)
     {
     case SIGALRM:
         finished = true;
-        // int nClients;
-        // sem_getvalue(clientQ, &nClients);
-        // if(nClients == 0)
-        //     sem_post(clientQ);
         break;
     default:
         break;
@@ -243,13 +239,16 @@ int main(int argc, char *argv[])
     pthread_t threads[MAX_THREADS];
     int nThreads = 0;
 
+    struct sigaction action;
+    action.sa_handler = sig_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0; 
+
     initFlags(&flags);
     setFlags(argc, argv, &flags);
 
-    if (signal(SIGALRM, sig_handler) < 0) {
-        fprintf(stderr, "Error on setting signal handler\n");
-        exit(1);
-    }
+    sigaction(SIGALRM, &action, NULL);
+
     alarm(flags.nsecs);
 
     char *publicFIFO = malloc(sizeof(char) * 100);
@@ -257,6 +256,9 @@ int main(int argc, char *argv[])
     mkfifo(publicFIFO, 0666);
 
     int fd = open(publicFIFO, O_RDONLY);
+    if(fd == -1 && errno == EINTR) {
+        finished = true;
+    }
     message *toReceive = malloc(sizeof(message));
 
 
@@ -271,6 +273,7 @@ int main(int argc, char *argv[])
         }
         else if((nClients = read(fd, toReceive, sizeof(message))) > 0)
         {
+            
             if(pthread_create(&threads[nThreads], NULL, receiveRequest, toReceive) == 0) {
                 nThreads++;
             }
