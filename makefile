@@ -1,7 +1,7 @@
 all: Q1 U1
 
 Q1: Q1.c
-	gcc -Wall -pthread -o Q1 Q1.c
+	gcc -Wall -pthread -o Q1 Q1.c -o queue queue.c 
 
 U1: U1.c
 	gcc -Wall -pthread -o U1 U1.c

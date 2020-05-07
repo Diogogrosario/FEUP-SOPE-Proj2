@@ -92,6 +92,7 @@ void printMessage(message *msg, char* op){
 
 void *sendRequest(void *thread_no)
 {
+    pthread_detach(pthread_self());
     message msg = makeMessage(*(int *)thread_no, -1);
 
     char* publicFIFO = malloc(sizeof(char)*100);
@@ -189,7 +190,7 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL));
     
-    pthread_t threads[MAX_THREADS];
+    pthread_t thread;
 
     initFlags(&flags);
     setFlags(argc, argv, &flags);
@@ -209,7 +210,7 @@ int main(int argc, char *argv[]) {
             break;
         }
         
-        if(pthread_create(&threads[thread_no], NULL, sendRequest, &thread_no) == 0) {
+        if(pthread_create(&thread, NULL, sendRequest, &thread_no) == 0) {
             thread_no += 1;
             usleep((rand()%50000)+50000); //time between requests
         }
@@ -219,11 +220,7 @@ int main(int argc, char *argv[]) {
 
         clock_gettime(CLOCK_REALTIME,&timeNow);
     }
-
-    for(int i = 0; i < thread_no; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
+    
     close(fd);  
 
     return 0;
