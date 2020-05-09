@@ -1,9 +1,12 @@
 #include <stdio.h> 
 #include <stdlib.h> 
+#include <pthread.h>
 #include "queue.h"
 
+
+
 // A utility function to create a new linked list node. 
-QNode* newNode(long int k) 
+QNode* newNode(message * k) 
 { 
     QNode* temp = (QNode*)malloc(sizeof(QNode)); 
     temp->key = k; 
@@ -20,7 +23,7 @@ Queue* createQueue()
 } 
   
 // The function to add a key k to q 
-void enQueue(Queue* q, long int k) 
+void enQueue(Queue* q, message * k) 
 { 
     // Create a new LL node 
     QNode* temp = newNode(k); 
@@ -37,11 +40,11 @@ void enQueue(Queue* q, long int k)
 } 
 
 // Function to remove a key from given queue q 
-long int deQueue(Queue* q) 
+message * deQueue(Queue* q) 
 { 
     // If queue is empty, return NULL. 
     if (q->front == NULL) 
-        return 'N'; 
+        return NULL; 
   
     // Store previous front and move front one node ahead 
     QNode* temp = q->front; 

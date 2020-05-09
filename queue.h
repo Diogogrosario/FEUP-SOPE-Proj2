@@ -7,6 +7,15 @@
 
 //https://www.geeksforgeeks.org/queue-linked-list-implementation/
 
+typedef struct
+{
+    int i;
+    pid_t pid;
+    pthread_t tid;
+    int dur;
+    int pl;
+} message;
+
 /** @defgroup Queue Queue
  *
  * @{
@@ -22,7 +31,7 @@ typedef struct Node QNode;
  * 
  */
 struct Node{  
-    long int key; 
+    message * key; 
     QNode* next; 
 }; 
   
@@ -39,7 +48,7 @@ typedef struct {
  * 
  * @return              Pointer to new queue node
  */
-QNode* newNode(long int k);
+QNode* newNode(message * k);
 
 /**
  * @brief Creates a new queue
@@ -51,14 +60,14 @@ Queue* createQueue();
 /**
  * @brief Adds element to queue            
  */
-void enQueue(Queue* q, long int k);
+void enQueue(Queue* q, message * k);
 
 /**
  * @brief Pops and returns element from queue
  * 
  * @return              Front node data
  */
-long int deQueue(Queue* q);
+message * deQueue(Queue* q);
 
 /**
  * @brief Checks if a queue is empty

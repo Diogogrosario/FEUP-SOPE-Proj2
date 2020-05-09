@@ -12,6 +12,8 @@
 #include <signal.h>
 #include "queue.h"
 
+pthread_mutex_t printQMut = PTHREAD_MUTEX_INITIALIZER;
+
 #define MAX_THREADS 500000
 
 struct timespec start;
@@ -20,8 +22,7 @@ bool hasFifoName = false;
 int nThreads = 0;
 int nOccupied = 0;
 Queue *occupied;
-sem_t *sem_id_occupied;
-sem_t *sem_id_available;
+sem_t *sem_id_nThreads;
 
 typedef struct
 {
@@ -32,15 +33,6 @@ typedef struct
 } flag;
 
 flag flags;
-
-typedef struct
-{
-    int i;
-    pid_t pid;
-    pthread_t tid;
-    int dur;
-    int pl;
-} message;
 
 void printFlags()
 {
@@ -121,6 +113,7 @@ message makeMessage(int i, int dur, int pl)
 
 void printMessage(message *msg, char *op)
 {
+    pthread_mutex_lock(&printQMut);
     printf("%ld; ", time(NULL));
     printf("%d; ", msg->i);
     printf("%d; ", msg->pid);
@@ -128,6 +121,7 @@ void printMessage(message *msg, char *op)
     printf("%d; ", msg->dur);
     printf("%d; ", msg->pl);
     printf("%s\n", op);
+    pthread_mutex_unlock(&printQMut);
 }
 
 void sig_handler(int intType)
@@ -146,6 +140,8 @@ void *receiveRequest(void *msg)
 {
     pthread_detach(pthread_self());
     message request = *(message *)msg;
+    free(msg);
+
     printMessage(&request, "RECVD");
 
     //SEMAPHORE
@@ -153,34 +149,33 @@ void *receiveRequest(void *msg)
     sprintf(semName, "sem.%d.%ld", request.pid, request.tid);
     sem_t *sem_id = sem_open(semName, O_CREAT, 0600, 0);
 
-    char *semName2 = malloc(sizeof(char) * 255);
-    sprintf(semName2, "sem2.%d.%ld", request.pid, request.tid);
-    sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
+    // char *semName2 = malloc(sizeof(char) * 255);
+    // sprintf(semName2, "sem2.%d.%ld", request.pid, request.tid);
+    // sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
 
-    
     char *aux = malloc(sizeof(char) * 100);
     sprintf(aux, "/tmp/%d.%ld", request.pid, request.tid);
 
-    if (sem_id2 == NULL)
-    {
-        fprintf(stderr, "Error on sem_open for %s\n", semName2);
-        nThreads--;
-        return NULL;
-    }
+    // if (sem_id2 == NULL)
+    // {
+    //     fprintf(stderr, "Error on sem_open for %s\n", semName2);
+    //     nThreads--;
+    //     return NULL;
+    // }
     if (sem_id == NULL)
     {
         fprintf(stderr, "Error on sem_open for %s\n", semName);
-        nThreads--;
+        nThreads++;
         return NULL;
     }
- 
+
     int fdSend;
 
     //LOCK, WAITING FOR CLIENT TO OPEN FIFO
     if (sem_wait(sem_id) < 0)
     {
         fprintf(stderr, "Error on sem_wait for %s\n", semName);
-        nThreads--;
+        nThreads++;
         return NULL;
     }
 
@@ -188,18 +183,16 @@ void *receiveRequest(void *msg)
     if ((fdSend = open(aux, O_WRONLY)) == -1)
     {
         printMessage(&request, "GAVUP");
-        nThreads--;
+        nThreads++;
         return NULL;
     }
 
-    sem_wait(sem_id_available);
-
     message *toSend = malloc(sizeof(message));
-
     if (!finished)
     {
         *toSend = makeMessage(request.i, request.dur, request.i);
     }
+    
     else
     {
         *toSend = makeMessage(request.i, request.dur, -1);
@@ -212,49 +205,49 @@ void *receiveRequest(void *msg)
 
     if (finished)
     {
-        if (sem_post(sem_id2) < 0)
-        {
-            fprintf(stderr, "Error on sem_post for %s\n", semName2);
-            nThreads--;
-            return NULL;
-        }
+        // if (sem_post(sem_id2) < 0)
+        // {
+        //     fprintf(stderr, "Error on sem_post for %s\n", semName2);
+        //     nThreads--;
+        //     return NULL;
+        // }
         printMessage(toSend, "2LATE");
         close(fdSend);
         free(aux);
+        sem_close(sem_id);
         free(toSend);
+        sem_unlink(semName);
         free(semName);
-        free(semName2);
-        free(semOccupied);
-        nThreads--;
+        // free(semName2);
+        nThreads++;
         return NULL;
     }
 
     //CLIENT CAN NOW RECEIVE MSG
-    if (sem_post(sem_id2) < 0)
-    {
-        fprintf(stderr, "Error on sem_post for %s\n", semName2);
-        nThreads--;
-        return NULL;
-    }
+    // if (sem_post(sem_id2) < 0)
+    // {
+    //     fprintf(stderr, "Error on sem_post for %s\n", semName2);
+    //     nThreads--;
+    //     return NULL;
+    // }
 
-
-    nOccupied++;
     printMessage(toSend, "ENTER");
-    deQueue(occupied);
 
     usleep(request.dur * 1000);
-    nOccupied--;
+    nOccupied++;
     printMessage(toSend, "TIMUP");
-    
 
     close(fdSend);
 
     free(toSend);
+    sem_close(sem_id);
     free(aux);
+    sem_unlink(semName);
     free(semName);
-    free(semName2);
+    
+    // free(semName2);
 
-    nThreads--;
+    nThreads++;
     return NULL;
 }
 
@@ -283,65 +276,74 @@ int main(int argc, char *argv[])
 
     alarm(flags.nsecs);
 
-    char *semOccupied = malloc(sizeof(char) * 255);
-    sprintf(semOccupied, "sem3");
-    sem_id_occupied = sem_open(semOccupied, O_CREAT, 0600, 0);
-    if(sem_id_occupied == NULL) {
-        fprintf(stderr, "Error on sem_open for %s\n", semOccupied);
-        return 1;
-    }
+    nThreads = flags.nthreads;
 
-    char *semAvail = malloc(sizeof(char) * 255);
-    sprintf(semAvail, "sem4");
-    sem_id_available = sem_open(semAvail, O_CREAT, 0600, 0);
-    if(sem_id_available == NULL) {
-        fprintf(stderr, "Error on sem_open for %s\n", semAvail);
-        return 1;
-    }
+    // char *semAvail = malloc(sizeof(char) * 255);
+    // sprintf(semAvail, "sem4");
+    // sem_id_available = sem_open(semAvail, O_CREAT, 0600, 0);
+    // if(sem_id_available == NULL) {
+    //     fprintf(stderr, "Error on sem_open for %s\n", semAvail);
+    //     return 1;
+    // }
 
     char *publicFIFO = malloc(sizeof(char) * 100);
     sprintf(publicFIFO, "/tmp/%s", flags.fifoname);
     mkfifo(publicFIFO, 0666);
 
-    int fd = open(publicFIFO, O_RDONLY);
+    int fd = open(publicFIFO, O_RDONLY | O_NONBLOCK);
     if (fd == -1 && errno == EINTR)
     {
         perror("Could not open public FIFO for reading");
         finished = true;
     }
-    message *toReceive = malloc(sizeof(message));
+
 
     int nClients = 0;
-    while (nClients != 0 || !finished)
+    bool emptyQueue = false;
+    int counter = 0;
+    while (!emptyQueue && (nClients != 0 || !finished))
     {
-        if (nThreads >= MAX_THREADS)
+        
+        message *toReceive = malloc(sizeof(message));
+
+        if (!finished)
         {
-            printf("Can't create more threads!\n");
-            break;
+            if ((nClients = read(fd, toReceive, sizeof(message))) > 0)
+            {
+                enQueue(occupied, toReceive);
+                printf("queued number: %d\n", counter);
+                counter++;
+            }
         }
-        else if ((nClients = read(fd, toReceive, sizeof(message))) > 0)
+        if (!queue_empty(occupied))
         {
 
-            if (pthread_create(&thread, NULL, receiveRequest, toReceive) == 0)
+            if (nThreads > 0)
             {
-                enQueue(occupied, thread);
-                nThreads++;
-            }
-            else
-            {
-                fprintf(stderr, "Error on creating thread %d on server\n", nThreads);
+                if (pthread_create(&thread, NULL, receiveRequest, deQueue(occupied)) == 0)
+                {
+                    nThreads--;
+                }
+                else
+                {
+                    fprintf(stderr, "Error on creating thread %d on server\n", nThreads);
+                }
             }
         }
+        if (finished)
+            emptyQueue = queue_empty(occupied);
     }
 
-    close(fd);
-    unlink(publicFIFO);
     finished = true;
 
+    if (fd != -1)
+        close(fd);
+    unlink(publicFIFO);
+
     free(publicFIFO);
-    free(toReceive);
-    free(semOccupied);
-    free(semAvail);
+    //free(toReceive);
+
+    pthread_mutex_destroy(&printQMut);
 
     pthread_exit(0);
 }
