@@ -13,8 +13,6 @@
 
 #define MAX_THREADS 500000
 
-pthread_mutex_t printUMut = PTHREAD_MUTEX_INITIALIZER;
-
 struct timespec start;
 
 typedef struct{
@@ -38,6 +36,8 @@ int fd;
 bool closed = false;
 
 bool hasFifoName = false;
+
+pthread_mutex_t printMut = PTHREAD_MUTEX_INITIALIZER;
 
 
 void printFlags(flagsList * flags){
@@ -81,7 +81,7 @@ message makeMessage(int i, int pl){
 }
 
 void printMessage(message *msg, char* op){
-    pthread_mutex_lock(&printUMut);
+    pthread_mutex_lock(&printMut);
     printf("%ld; ",time(NULL));
     printf("%d; ", msg->i);
     printf("%d; ", msg->pid);
@@ -89,7 +89,7 @@ void printMessage(message *msg, char* op){
     printf("%d; ", msg->dur);
     printf("%d; ", msg->pl);
     printf("%s\n", op);
-    pthread_mutex_unlock(&printUMut);
+    pthread_mutex_unlock(&printMut);
 }
 
 
@@ -109,20 +109,12 @@ void *sendRequest(void *thread_no)
     sprintf(semName, "sem.%d.%ld", msg.pid, msg.tid);
     sem_t *sem_id = sem_open(semName, O_CREAT, 0600, 0);
 
-    // char *semName2 = malloc(sizeof(char) * 255);
-    // sprintf(semName2, "sem2.%d.%ld", msg.pid, msg.tid);
-    // sem_t *sem_id2 = sem_open(semName2, O_CREAT, 0600, 0);
-
-    // if(sem_id2 == NULL) {
-    //     fprintf(stderr, "Error on sem_open for %s\n", semName2);
-    //     return NULL;
-    // }
     if(sem_id == NULL) {
         fprintf(stderr, "Error on sem_open for %s\n", semName);
         return NULL;
     }
 
-    if((fd = open(publicFIFO, O_WRONLY|O_NONBLOCK)) == -1){
+    if((fd = open(publicFIFO, O_WRONLY)) == -1){
         printMessage(&msg,"CLOSD");
         closed = true;
         return NULL;
@@ -162,11 +154,6 @@ void *sendRequest(void *thread_no)
 
     message *toReceive = malloc(sizeof(message));
 
-    //WAITING FOR SERVER RESPONSE
-    // if(sem_wait(sem_id2)<0){
-    //     fprintf(stderr, "Error on sem_wait for %s\n", semName2);
-    //     return NULL;
-    // }
     if(read(fdRequest, toReceive, sizeof(message)) <= 0)
     {
         printMessage(&msg,"FAILD");
@@ -184,8 +171,9 @@ void *sendRequest(void *thread_no)
     close(fdRequest);
     unlink(aux);
     
+    sem_close(sem_id);
+    sem_unlink(semName);
     free(semName);
-    // free(semName2);
 
     return NULL;
 }
@@ -200,7 +188,7 @@ int main(int argc, char *argv[]) {
     setFlags(argc, argv, &flags);
     if(flags.nsecs == 0 || !hasFifoName) {
         fprintf(stderr, "Correct usage: U1 -t n fifoName\n");
-        return 0;
+        pthread_exit(0);
     }
 
     int thread_no = 0;
@@ -225,10 +213,7 @@ int main(int argc, char *argv[]) {
         clock_gettime(CLOCK_REALTIME,&timeNow);
     }
     
-
     close(fd);  
 
-    pthread_mutex_destroy(&printUMut);
-
-    return 0;
+    pthread_exit(0);
 }
