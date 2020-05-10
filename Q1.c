@@ -18,10 +18,15 @@ struct timespec start;
 bool finished = false;
 bool hasFifoName = false;
 int nThreads = 0;
-int nOccupied = 0;
+int nFreePlaces = 0;
 sem_t *sem_id_threads;
+Queue *places;
 
-pthread_mutex_t printMut = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t printQMut = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_mutex_t placesMut = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t conditionMut = PTHREAD_COND_INITIALIZER;
 
 bool threadSem;
 
@@ -55,8 +60,8 @@ void printFlags()
 void initFlags()
 {
     flags.nsecs = 0;
-    flags.nplaces = 0;
-    flags.nthreads = 0;
+    flags.nplaces = 5;
+    flags.nthreads = 5;
 }
 
 void setFlags(int argc, char *argv[])
@@ -121,9 +126,18 @@ message makeMessage(int i, int dur, int pl)
     return msg;
 }
 
+void populateQueue(int nPlaces)
+{
+    for (int i = 1; i <= nPlaces; i++)
+    {
+        enQueue(places, i);
+    }
+    return;
+}
+
 void printMessage(message *msg, char *op)
 {
-    pthread_mutex_lock(&printMut);
+    pthread_mutex_lock(&printQMut);
     printf("%ld; ", time(NULL));
     printf("%d; ", msg->i);
     printf("%d; ", msg->pid);
@@ -131,7 +145,7 @@ void printMessage(message *msg, char *op)
     printf("%d; ", msg->dur);
     printf("%d; ", msg->pl);
     printf("%s\n", op);
-    pthread_mutex_unlock(&printMut);
+    pthread_mutex_unlock(&printQMut);
 }
 
 void sig_handler(int intType)
@@ -150,7 +164,7 @@ void *receiveRequest(void *msg)
 {
     pthread_detach(pthread_self());
     message request = *(message *)msg;
-    //free(msg);
+    free(msg);
     printMessage(&request, "RECVD");
 
     //SEMAPHORE
@@ -191,23 +205,18 @@ void *receiveRequest(void *msg)
 
     message *toSend = malloc(sizeof(message));
 
-    if (!finished)
-    {
-        *toSend = makeMessage(request.i, request.dur, request.i);
-    }
-    else
-    {
-        *toSend = makeMessage(request.i, request.dur, -1);
-    }
-
-    if (write(fdSend, toSend, sizeof(message)) == -1)
-    {
-        perror("Error on writing server response to public FIFO\n");
-    }
+    *toSend = makeMessage(request.i, request.dur, request.i);
 
     if (finished)
     {
+        toSend->pl = -1;
+        if (write(fdSend, toSend, sizeof(message)) == -1)
+        {
+            perror("Error on writing server response to public FIFO\n");
+        }
+
         printMessage(toSend, "2LATE");
+
         close(fdSend);
         free(aux);
         free(toSend);
@@ -217,11 +226,36 @@ void *receiveRequest(void *msg)
         return NULL;
     }
 
+    int UPlace = 0;
+    pthread_mutex_lock(&placesMut);
+    if (nFreePlaces == 0)
+    {
+        while (pthread_cond_wait(&conditionMut, &placesMut) != 0);
+    }
+
+    UPlace = deQueue(places);
+    nFreePlaces--;
+    toSend->pl = UPlace;
+    if (write(fdSend, toSend, sizeof(message)) == -1)
+    {
+        perror("Error on writing server response to public FIFO\n");
+    }
+
     printMessage(toSend, "ENTER");
+
+    pthread_mutex_unlock(&placesMut);
 
     usleep(request.dur * 1000);
 
+    pthread_mutex_lock(&placesMut);
+
     printMessage(toSend, "TIMUP");
+    nFreePlaces++;
+    enQueue(places, UPlace);
+
+    pthread_mutex_unlock(&placesMut);
+
+    pthread_cond_signal(&conditionMut);
 
     close(fdSend);
 
@@ -252,8 +286,20 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Correct usage: Q1 -t n fifoName\n");
         pthread_exit(0);
     }
+    if(flags.nplaces == 0){
+        fprintf(stderr, "N Places cannot be 0\n");
+        pthread_exit(0);
+    }
+
+    if(flags.nthreads == 0){
+        fprintf(stderr, "N Threads cannot be 0\n");
+        pthread_exit(0);
+    }
 
     nThreads = flags.nthreads;
+    nFreePlaces = flags.nplaces;
+    places = createQueue();
+    populateQueue(nFreePlaces);
 
     sigaction(SIGALRM, &action, NULL);
 

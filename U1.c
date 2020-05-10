@@ -37,7 +37,7 @@ bool closed = false;
 
 bool hasFifoName = false;
 
-pthread_mutex_t printMut = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t printUMut = PTHREAD_MUTEX_INITIALIZER;
 
 
 void printFlags(flagsList * flags){
@@ -81,7 +81,7 @@ message makeMessage(int i, int pl){
 }
 
 void printMessage(message *msg, char* op){
-    pthread_mutex_lock(&printMut);
+    pthread_mutex_lock(&printUMut);
     printf("%ld; ",time(NULL));
     printf("%d; ", msg->i);
     printf("%d; ", msg->pid);
@@ -89,7 +89,7 @@ void printMessage(message *msg, char* op){
     printf("%d; ", msg->dur);
     printf("%d; ", msg->pl);
     printf("%s\n", op);
-    pthread_mutex_unlock(&printMut);
+    pthread_mutex_unlock(&printUMut);
 }
 
 
@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
         
         if(pthread_create(&thread, NULL, sendRequest, &thread_no) == 0) {
             thread_no += 1;
-            usleep((rand()%50000)+50000); //time between requests
+            usleep((rand()%20000)+30000); //time between requests
         }
         else {
             fprintf(stderr, "Error on creating thread %d on client\n", thread_no);

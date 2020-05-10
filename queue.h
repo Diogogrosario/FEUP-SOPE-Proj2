@@ -22,7 +22,7 @@ typedef struct Node QNode;
  * 
  */
 struct Node{  
-    long int key; 
+    int key; 
     QNode* next; 
 }; 
   
@@ -39,7 +39,7 @@ typedef struct {
  * 
  * @return              Pointer to new queue node
  */
-QNode* newNode(long int k);
+QNode* newNode(int k);
 
 /**
  * @brief Creates a new queue
@@ -51,14 +51,14 @@ Queue* createQueue();
 /**
  * @brief Adds element to queue            
  */
-void enQueue(Queue* q, long int k);
+void enQueue(Queue* q, int k);
 
 /**
  * @brief Pops and returns element from queue
  * 
  * @return              Front node data
  */
-long int deQueue(Queue* q);
+int deQueue(Queue* q);
 
 /**
  * @brief Checks if a queue is empty
