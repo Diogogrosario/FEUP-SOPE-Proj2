@@ -24,7 +24,7 @@ Em todos os casos de saída do programa, todos os fifos e semáforos são fechad
 
 ### Alterações ao projeto 1
 Foi corrigido o problema dos printf's quando 2 threads o faziam ao mesmo tempo. A solução foi adicionar um mutex lock antes dos prints e unlock depois para garantir que são feitas 1 de cada vez entre threads.
-A duração entre pedidos foi diminuída de 50-100 ms para 30-50 ms.
+A duração entre pedidos foi diminuída de 50-100 ms para 2-5 ms e a duração deste foi alterada para 50-100 ms.
 Foi removido o segundo semáforo da 1ª parte uma vez que o programa "bloqueia" no read. O primeiro semáforo foi mantida como uma segurança uma vez que não é garantido que o cliente crie o seu fifo privado antes do servidor o tentar abrir.
 O pthread join no ficheiro U1 foi removido, sendo substituídos por detach.
 
@@ -34,5 +34,4 @@ Foram adicionados 3 semáforos, 1 deles para os printf como referido anteriormen
 ### Escolha dos lugares
 Optámos por utilizar uma implementação de uma queue (//https://www.geeksforgeeks.org/queue-linked-list-implementation/) que no início do servidor é preenchida com int's, representando os numeros lugares disponíveis (Ex: -l 3 faz com que a queue seja {1,2,3}). Ao utilizar um lugar a thread retira o primeiro int da queue e utiliza-o. Quando o pedido dá TIMUP, esse int é reposto na queue.
 
-### Valores por omissão
-Por omissão o valor de nThreads e nPlaces é 5.
+

@@ -60,8 +60,8 @@ void printFlags()
 void initFlags()
 {
     flags.nsecs = 0;
-    flags.nplaces = 5;
-    flags.nthreads = 5;
+    flags.nplaces = INT16_MAX;
+    flags.nthreads = INT16_MAX;
 }
 
 void setFlags(int argc, char *argv[])
@@ -138,12 +138,12 @@ void populateQueue(int nPlaces)
 void printMessage(message *msg, char *op)
 {
     pthread_mutex_lock(&printQMut);
-    printf("%ld; ", time(NULL));
-    printf("%d; ", msg->i);
-    printf("%d; ", msg->pid);
-    printf("%ld; ", msg->tid);
-    printf("%d; ", msg->dur);
-    printf("%d; ", msg->pl);
+    printf("%ld ; ", time(NULL));
+    printf("%d ; ", msg->i);
+    printf("%d ; ", msg->pid);
+    printf("%ld ; ", msg->tid);
+    printf("%d ; ", msg->dur);
+    printf("%d ; ", msg->pl);
     printf("%s\n", op);
     pthread_mutex_unlock(&printQMut);
 }
