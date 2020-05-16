@@ -11,9 +11,9 @@
 #include <semaphore.h>
 #include <stdbool.h>
 
-#define MAX_THREADS 800
+#define MAX_DESCRIPTORS 800
 
-int numberOfFreeFileDescriptors = MAX_THREADS;
+int numberOfFreeFileDescriptors = MAX_DESCRIPTORS;
 
 struct timespec start;
 
@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
             if (pthread_create(&thread, NULL, sendRequest, &thread_no) == 0)
             {
                 thread_no += 1;
-                usleep((rand() % 3000)+2000); //time between requests
+                usleep((rand() % 5000)+3000); //time between requests
             }
             else
             {

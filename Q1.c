@@ -227,12 +227,14 @@ void *receiveRequest(void *msg)
     }
 
     int UPlace = 0;
-    pthread_mutex_lock(&placesMut);
-    if (nFreePlaces == 0)
-    {
-        while (pthread_cond_wait(&conditionMut, &placesMut) != 0);
-    }
+    
 
+    pthread_mutex_lock(&placesMut);
+    while (nFreePlaces == 0)
+    {
+        pthread_cond_wait(&conditionMut, &placesMut);
+    }
+    
     UPlace = deQueue(places);
     nFreePlaces--;
     toSend->pl = UPlace;
@@ -242,7 +244,7 @@ void *receiveRequest(void *msg)
     }
 
     printMessage(toSend, "ENTER");
-
+    
     pthread_mutex_unlock(&placesMut);
 
     usleep(request.dur * 1000);
@@ -250,12 +252,12 @@ void *receiveRequest(void *msg)
     pthread_mutex_lock(&placesMut);
 
     printMessage(toSend, "TIMUP");
-    nFreePlaces++;
     enQueue(places, UPlace);
+    pthread_cond_signal(&conditionMut);
+    nFreePlaces++;
 
     pthread_mutex_unlock(&placesMut);
 
-    pthread_cond_signal(&conditionMut);
 
     close(fdSend);
 
