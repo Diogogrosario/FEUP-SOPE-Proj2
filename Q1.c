@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
     int fd = open(publicFIFO, O_RDONLY);
     if (fd == -1 && errno == EINTR)
     {
-        perror("Could not open public FIFO for reading");
+        perror("No requests, closing bathroom\n");
         finished = true;
     }
     message *toReceive = malloc(sizeof(message));
