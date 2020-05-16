@@ -1,9 +1,9 @@
-all: Q1 U1
+all: Q2 U2
 
-Q2: Q1.c
+Q2: Q2.c
 	gcc -Wall -pthread -o queue queue.c -o Q2 Q2.c  
 
-U2: U1.c
+U2: U2.c
 	gcc -Wall -pthread -o U2 U2.c
 
 
